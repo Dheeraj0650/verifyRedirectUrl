@@ -4,8 +4,9 @@ const {google} = require('googleapis');
 const https = require('node:https');
 
 const app = express();
-const port = 3000;
-var client, googleSheets, spreadsheetId, auth, data, row_length;
+
+const port = process.env.PORT || 3000;
+var client, googleSheets, spreadsheetId, auth, data, row_length, getRows;
 var statusCodeArray = {};
 var count =1;
 var changedLinks = [];
@@ -14,10 +15,6 @@ var statusMessage = [];
 app.use(bodyParser.urlencoded({extended: true}));
 
 app.get('/', async (req, res) => {
-  res.sendFile(__dirname + "/index.html")
-})
-
-app.get('/check', async (req, res) => {
 
   auth = await new google.auth.GoogleAuth({
     keyFile: "credentials.json",
@@ -33,7 +30,7 @@ app.get('/check', async (req, res) => {
   spreadsheetId = "1ysFPRG67kXbmLU3vXhN-tZJB7h9kxyq5ukH6Hqxo5QY";
 
   // Read rows from spreadsheet
-  const getRows = await googleSheets.spreadsheets.values.get({
+  getRows = await googleSheets.spreadsheets.values.get({
     auth,
     spreadsheetId,
     range: "Sheet1!A:A",
@@ -41,13 +38,12 @@ app.get('/check', async (req, res) => {
 
   var rowData = getRows['data']['values'];
   statusCodeArray = [];
-  callApi(rowData);
+  callApi(rowData, res);
   // updateSheet();
-  res.send(getRows);
   })
 
 
-  async function callApi(rowData){
+  async function callApi(rowData, res){
     row_length = rowData.length;
     for(var idx = 1; idx < row_length; idx++){
         var prefix = "https://www.";
@@ -56,15 +52,15 @@ app.get('/check', async (req, res) => {
           continue;
         }
         if (url.indexOf(prefix) === 0) {
-          setStatusOfUrl(url, idx+1, rowData);
+          setStatusOfUrl(url, idx+1, rowData, res);
         }
         else {
-          setStatusOfUrl("https://"+url, idx+1, rowData);
+          setStatusOfUrl("https://"+url, idx+1, rowData, res);
         }
     }
   }
 
-async function setStatusOfUrl(url, idx, rowData) {
+async function setStatusOfUrl(url, idx, rowData, res) {
     var httpRequest = https.get(url, (response) => {
 
         data = response.statusCode;
@@ -100,7 +96,7 @@ async function setStatusOfUrl(url, idx, rowData) {
         console.log(count);
         count = count + 1;
         if(count === row_length){
-          updateSheet(rowData);
+          updateSheet(rowData, res);
         }
     });
 
@@ -111,7 +107,7 @@ async function setStatusOfUrl(url, idx, rowData) {
           console.log(count);
           console.log(url + " out ");
           if(count === row_length){
-            updateSheet(rowData);
+            updateSheet(rowData, res);
           }
     });
 }
@@ -121,7 +117,7 @@ function pushDataToArray(data, url, link, statusMessage){
   statusCodeArray[url] = [data, link, statusMessage];
 }
 
-async function updateSheet(rowData){
+async function updateSheet(rowData, res){
   var finalArray = [];
   for(var idx = 1; idx < rowData.length; idx++){
     finalArray.push(statusCodeArray["https://" + rowData[idx]]);
@@ -133,7 +129,7 @@ async function updateSheet(rowData){
     valueInputOption: "USER_ENTERED",
     resource: { values: finalArray },
   });
-  console.log(finalArray);
+  res.send(getRows);
 }
 
 
